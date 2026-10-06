@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuickShare | Ephemeral Notes</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="app-header">
+      <h1>QuickShare</h1>
+      <p>Send text securely between devices. Auto-deletes in 15 minutes.</p>
+    </header>
+
+    <div class="tab-switcher">
+      <button id="sendTabBtn" class="tab-btn active" onclick="switchTab('send')">Send Note</button>
+      <button id="receiveTabBtn" class="tab-btn" onclick="switchTab('receive')">Receive Note</button>
+    </div>
+
+    <!-- SEND PANEL -->
+    <section id="sendPanel" class="panel">
+      <label for="noteInput" class="input-label">Enter your text or note:</label>
+      <textarea id="noteInput" placeholder="Paste your links, code snippets, or notes here..."></textarea>
+      <button class="action-btn" onclick="shareNote()">Generate Code</button>
+
+      <div id="sendResult" class="result-box hidden">
+        <p class="result-label">Your 4-Digit Access Code:</p>
+        <div id="pinDisplay" class="pin-badge">----</div>
+        <p class="sub-text">Enter this code on the receiving device within 15 minutes.</p>
+      </div>
+    </section>
+
+    <!-- RECEIVE PANEL -->
+    <section id="receivePanel" class="panel hidden">
+      <label for="pinInput" class="input-label">Enter 4-Digit Code:</label>
+      <div class="pin-input-group">
+        <input type="text" id="pinInput" maxlength="4" placeholder="e.g. 4829" autocomplete="off" />
+        <button class="action-btn" onclick="retrieveNote()">Retrieve</button>
+      </div>
+
+      <div id="receiveResult" class="result-box hidden">
+        <div class="result-header">
+          <span class="result-label">Retrieved Content:</span>
+          <span id="expiryBadge" class="timer-badge"></span>
+        </div>
+        <div id="contentDisplay" class="content-box"></div>
+        <button class="secondary-btn" onclick="copyContent()">Copy Text</button>
+      </div>
+      
+      <p id="receiveError" class="error-text hidden"></p>
+    </section>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      const sendPanel = document.getElementById('sendPanel');
+      const receivePanel = document.getElementById('receivePanel');
+      const sendBtn = document.getElementById('sendTabBtn');
+      const receiveBtn = document.getElementById('receiveTabBtn');
+
+      if (tab === 'send') {
+        sendPanel.classList.remove('hidden');
+        receivePanel.classList.add('hidden');
+        sendBtn.classList.add('active');
+        receiveBtn.classList.remove('active');
+      } else {
+        sendPanel.classList.add('hidden');
+        receivePanel.classList.remove('hidden');
+        sendBtn.classList.remove('active');
+        receiveBtn.classList.add('active');
+      }
+    }
+
+    async function shareNote() {
+      const text = document.getElementById('noteInput').value.trim();
+      const resultBox = document.getElementById('sendResult');
+      const pinDisplay = document.getElementById('pinDisplay');
+
+      if (!text) {
+        alert('Please enter some text before generating a code.');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          pinDisplay.textContent = data.pin;
+          resultBox.classList.remove('hidden');
+        } else {
+          alert(data.error || 'Failed to generate code.');
+        }
+      } catch (err) {
+        alert('Could not connect to server.');
+      }
+    }
+
+    async function retrieveNote() {
+      const pin = document.getElementById('pinInput').value.trim();
+      const resultBox = document.getElementById('receiveResult');
+      const contentDisplay = document.getElementById('contentDisplay');
+      const expiryBadge = document.getElementById('expiryBadge');
+      const errorText = document.getElementById('receiveError');
+
+      resultBox.classList.add('hidden');
+      errorText.classList.add('hidden');
+
+      if (pin.length !== 4) {
+        errorText.textContent = 'Please enter a valid 4-digit PIN.';
+        errorText.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/retrieve/${pin}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          contentDisplay.textContent = data.content;
+          expiryBadge.textContent = `Expires in ~${data.expiresInMinutes}m`;
+          resultBox.classList.remove('hidden');
+        } else {
+          errorText.textContent = data.error || 'Note not found or expired.';
+          errorText.classList.remove('hidden');
+        }
+      } catch (err) {
+        errorText.textContent = 'Could not reach server.';
+        errorText.classList.remove('hidden');
+      }
+    }
+
+    function copyContent() {
+      const content = document.getElementById('contentDisplay').textContent;
+      navigator.clipboard.writeText(content).then(() => {
+        alert('Copied to clipboard!');
+      });
+    }
+  </script>
+</body>
+</html>
